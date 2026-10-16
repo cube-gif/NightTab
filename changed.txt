@@ -1,0 +1,3 @@
+https://raw.githubusercontent.com/cube-gif/NightTab/main/links.txt
+https://raw.githubusercontent.com/cube-gif/NightTab/main/sync.bat
+https://raw.githubusercontent.com/cube-gif/NightTab/main/sync.ps1
