@@ -7,8 +7,9 @@ $linksFile = "links.txt"
 $changedFile = "changed.txt"
 
 function Update-Links {
+    $exts = @(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".svg", ".avif")
     $files = Get-ChildItem -File |
-        Where-Object { $_.Name -ne "sync.ps1" } |
+        Where-Object { $exts -contains $_.Extension.ToLower() } |
         Sort-Object Name
     $links = $files | ForEach-Object { "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/$($_.Name)" }
     [System.IO.File]::WriteAllLines("$PSScriptRoot\$linksFile", $links, (New-Object System.Text.UTF8Encoding($false)))
