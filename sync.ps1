@@ -2,6 +2,22 @@
 
 Set-Location -LiteralPath $PSScriptRoot
 
+# Оптимизация изображений: ширина 2560 px, крупные исходники — в _originals.
+# Папка _originals в .gitignore и в репозиторий не попадает.
+$python = Get-Command py -ErrorAction SilentlyContinue
+if ($python) {
+    & $python.Source -3 "$PSScriptRoot\optimize.py"
+} else {
+    $python = Get-Command python -ErrorAction SilentlyContinue
+    if (-not $python) {
+        throw "Python не найден: он нужен для optimize.py (Pillow)."
+    }
+    & $python.Source "$PSScriptRoot\optimize.py"
+}
+if ($LASTEXITCODE -ne 0) {
+    throw "Оптимизация изображений завершилась с ошибкой (код $LASTEXITCODE)."
+}
+
 $branch = "main"
 $linksFile = "links.txt"
 $changedFile = "changed.txt"
