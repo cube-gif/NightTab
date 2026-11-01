@@ -12,7 +12,7 @@ function Update-Links {
         Where-Object { $imgExts -contains $_.Extension.ToLower() } |
         Sort-Object Name
     $links = $files | ForEach-Object { "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/$($_.Name)" }
-    [System.IO.File]::WriteAllLines("$PSScriptRoot\$linksFile", $links, (New-Object System.Text.UTF8Encoding($false)))
+    [System.IO.File]::WriteAllLines("$PSScriptRoot\$linksFile", @($links), (New-Object System.Text.UTF8Encoding($false)))
     return $files.Name
 }
 
@@ -61,7 +61,7 @@ if (Test-Path -LiteralPath "$PSScriptRoot\.git\refs\heads\$branch") {
     }
 }
 
-[System.IO.File]::WriteAllLines("$PSScriptRoot\$changedFile", $changedUrls, (New-Object System.Text.UTF8Encoding($false)))
+[System.IO.File]::WriteAllLines("$PSScriptRoot\$changedFile", @($changedUrls), (New-Object System.Text.UTF8Encoding($false)))
 
 git add -A
 if (git status --porcelain) {
