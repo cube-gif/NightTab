@@ -7,11 +7,21 @@ $linksFile = "links.txt"
 $changedFile = "changed.txt"
 $imgExts = @(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".svg", ".avif")
 
+function ConvertTo-RawUrl([string]$relativePath) {
+    $segments = $relativePath -split '[\\/]'
+    $encoded = $segments | ForEach-Object {
+        # EscapeDataString кодирует пробелы, #, %, ?, юникод и другие опасные символы.
+        # Скобки допустимы в пути URL, поэтому оставляем их для читаемости.
+        ([Uri]::EscapeDataString($_)).Replace('%28', '(').Replace('%29', ')')
+    }
+    return "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/" + ($encoded -join '/')
+}
+
 function Update-Links {
     $files = Get-ChildItem -File |
         Where-Object { $imgExts -contains $_.Extension.ToLower() } |
         Sort-Object Name
-    $links = $files | ForEach-Object { "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/$($_.Name)" }
+    $links = $files | ForEach-Object { ConvertTo-RawUrl $_.Name }
     [System.IO.File]::WriteAllLines("$PSScriptRoot\$linksFile", @($links), (New-Object System.Text.UTF8Encoding($false)))
     return $files.Name
 }
@@ -57,7 +67,7 @@ if (Test-Path -LiteralPath "$PSScriptRoot\.git\refs\heads\$branch") {
     $changedUrls = $names | Where-Object {
         (Test-Path -LiteralPath "$PSScriptRoot\$_") -and ($imgExts -contains [System.IO.Path]::GetExtension($_).ToLower())
     } | ForEach-Object {
-        "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/$_"
+        ConvertTo-RawUrl $_
     }
 }
 
