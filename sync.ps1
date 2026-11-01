@@ -2,8 +2,42 @@
 
 Set-Location -LiteralPath $PSScriptRoot
 
-# Оптимизация изображений: ширина 2560 px, крупные исходники — в _originals.
-# Папка _originals в .gitignore и в репозиторий не попадает.
+$branch = "main"
+$linksFile = "links.txt"
+$changedFile = "changed.txt"
+$imgExts = @(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".svg", ".avif")
+
+function ConvertTo-RawUrl([string]$relativePath) {
+    $segments = $relativePath -split '[\\/]'
+    $encoded = $segments | ForEach-Object {
+        ([Uri]::EscapeDataString($_)).Replace('%28', '(').Replace('%29', ')')
+    }
+    return "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/" + ($encoded -join '/')
+}
+
+function Push-Changes {
+    git push origin $branch
+    if ($LASTEXITCODE -eq 0) { return }
+    Write-Host "Push отклонён — подтягиваю изменения с remote..."
+    git pull --rebase --autostash origin $branch
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Не удалось синхронизироваться с remote (возможен конфликт)."
+        exit 1
+    }
+    git push origin $branch
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Не удалось отправить изменения на remote."
+        exit 1
+    }
+}
+
+Write-Host "Синхронизация с remote..."
+git pull --rebase --autostash origin $branch
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Не удалось синхронизироваться с remote (возможен конфликт). Решите его вручную."
+    exit 1
+}
+
 $python = Get-Command py -ErrorAction SilentlyContinue
 if ($python) {
     & $python.Source -3 "$PSScriptRoot\optimize.py"
@@ -18,21 +52,6 @@ if ($LASTEXITCODE -ne 0) {
     throw "Оптимизация изображений завершилась с ошибкой (код $LASTEXITCODE)."
 }
 
-$branch = "main"
-$linksFile = "links.txt"
-$changedFile = "changed.txt"
-$imgExts = @(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".svg", ".avif")
-
-function ConvertTo-RawUrl([string]$relativePath) {
-    $segments = $relativePath -split '[\\/]'
-    $encoded = $segments | ForEach-Object {
-        # EscapeDataString кодирует пробелы, #, %, ?, юникод и другие опасные символы.
-        # Скобки допустимы в пути URL, поэтому оставляем их для читаемости.
-        ([Uri]::EscapeDataString($_)).Replace('%28', '(').Replace('%29', ')')
-    }
-    return "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/" + ($encoded -join '/')
-}
-
 function Update-Links {
     $files = Get-ChildItem -File |
         Where-Object { $imgExts -contains $_.Extension.ToLower() } |
@@ -43,10 +62,17 @@ function Update-Links {
 }
 
 git add -A
+$changedNames = @(git -c core.quotepath=false diff --cached --name-only --diff-filter=AM)
 $status = git status --porcelain
 
 if (-not $status) {
-    Write-Host "Изменений нет."
+    $unpushed = @(git log --oneline "origin/$branch..HEAD")
+    if ($unpushed.Count -gt 0) {
+        Write-Host "Есть неотправленные коммиты — отправляю..."
+        Push-Changes
+    } else {
+        Write-Host "Изменений нет."
+    }
     exit 0
 }
 
@@ -69,7 +95,7 @@ if ($realChanges) {
 
     $date = Get-Date -Format "dd.MM HH:mm"
     git commit -m "$date Синхронизация файлов"
-    git push origin $branch
+    Push-Changes
 
     Write-Host "Закоммичено:"
     $summary | ForEach-Object { Write-Host "  $_" }
@@ -77,22 +103,20 @@ if ($realChanges) {
 
 $allNames = Update-Links
 
-$changedUrls = @()
-if (Test-Path -LiteralPath "$PSScriptRoot\.git\refs\heads\$branch") {
-    $names = git -c core.quotepath=false diff --name-only --diff-filter=AM "HEAD~1" HEAD
-    $changedUrls = $names | Where-Object {
-        (Test-Path -LiteralPath "$PSScriptRoot\$_") -and ($imgExts -contains [System.IO.Path]::GetExtension($_).ToLower())
-    } | ForEach-Object {
-        ConvertTo-RawUrl $_
-    }
-}
+$changedUrls = @($changedNames | Where-Object {
+    (Test-Path -LiteralPath "$PSScriptRoot\$_") -and ($imgExts -contains [System.IO.Path]::GetExtension($_).ToLower())
+} | ForEach-Object {
+    ConvertTo-RawUrl $_
+})
 
-[System.IO.File]::WriteAllLines("$PSScriptRoot\$changedFile", @($changedUrls), (New-Object System.Text.UTF8Encoding($false)))
+if ($changedUrls.Count -gt 0 -or -not (Test-Path -LiteralPath "$PSScriptRoot\$changedFile")) {
+    [System.IO.File]::WriteAllLines("$PSScriptRoot\$changedFile", @($changedUrls), (New-Object System.Text.UTF8Encoding($false)))
+}
 
 git add -A
 if (git status --porcelain) {
     git commit -m "Обновить списки ссылок"
-    git push origin $branch
+    Push-Changes
 }
 
 Write-Host "Готово. Всего ссылок: $($allNames.Count), новых/изменённых: $($changedUrls.Count)"
