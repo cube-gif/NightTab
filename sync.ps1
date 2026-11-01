@@ -5,11 +5,11 @@ Set-Location -LiteralPath $PSScriptRoot
 $branch = "main"
 $linksFile = "links.txt"
 $changedFile = "changed.txt"
+$imgExts = @(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".svg", ".avif")
 
 function Update-Links {
-    $exts = @(".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".svg", ".avif")
     $files = Get-ChildItem -File |
-        Where-Object { $exts -contains $_.Extension.ToLower() } |
+        Where-Object { $imgExts -contains $_.Extension.ToLower() } |
         Sort-Object Name
     $links = $files | ForEach-Object { "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/$($_.Name)" }
     [System.IO.File]::WriteAllLines("$PSScriptRoot\$linksFile", $links, (New-Object System.Text.UTF8Encoding($false)))
@@ -30,7 +30,7 @@ $realChanges = $status | Where-Object {
 }
 
 if ($realChanges) {
-    $summary = git diff --cached --name-status |
+    $summary = git -c core.quotepath=false diff --cached --name-status |
         Where-Object { $_ -notmatch "\t$([regex]::Escape($linksFile))$" -and $_ -notmatch "\t$([regex]::Escape($changedFile))$" } |
         ForEach-Object {
             $p = $_ -split "`t"
@@ -53,14 +53,12 @@ $allNames = Update-Links
 
 $changedUrls = @()
 if (Test-Path -LiteralPath "$PSScriptRoot\.git\refs\heads\$branch") {
-    $changedUrls = git diff --name-status "HEAD~1" HEAD |
-        Where-Object { $_ -match "^(A|M)\t" } |
-        ForEach-Object {
-            $name = ($_ -split "`t")[1]
-            if (Test-Path -LiteralPath "$PSScriptRoot\$name") {
-                "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/$name"
-            }
-        }
+    $names = git -c core.quotepath=false diff --name-only --diff-filter=AM "HEAD~1" HEAD
+    $changedUrls = $names | Where-Object {
+        (Test-Path -LiteralPath "$PSScriptRoot\$_") -and ($imgExts -contains [System.IO.Path]::GetExtension($_).ToLower())
+    } | ForEach-Object {
+        "https://raw.githubusercontent.com/cube-gif/NightTab/$branch/$_"
+    }
 }
 
 [System.IO.File]::WriteAllLines("$PSScriptRoot\$changedFile", $changedUrls, (New-Object System.Text.UTF8Encoding($false)))
